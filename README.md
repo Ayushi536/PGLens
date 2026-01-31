@@ -82,7 +82,3 @@ By leveraging Artificial Intelligence and Machine Learning, PGLens converts unst
 This project is developed for academic and learning purposes. 
 
 ⭐ PGLens is developed as a semester-level Full-Stack + AIML project with real-world applicability.
-
-
-
-⭐ *PGLens is developed as a semester-level Full-Stack + AIML project with real-world applicability.*
