@@ -20,7 +20,7 @@ By leveraging Artificial Intelligence and Machine Learning, PGLens converts unst
 
 ---
 
-## 🛠️ Basic Technology Stack
+## 🛠️ Technology Stack
 
 - **Frontend:** Next.js, React, Tailwind CSS  
 - **Backend:** Django, Django REST Framework  
@@ -31,7 +31,7 @@ By leveraging Artificial Intelligence and Machine Learning, PGLens converts unst
 
 ---
 
-## 🧱 System Architecture (High-Level)
+## 🧱 System Architecture
 
 1. User submits PG listing / review / images  
 2. Backend stores structured data  
