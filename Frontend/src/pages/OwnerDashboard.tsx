@@ -4,7 +4,7 @@ import { Home, Building, BarChart3, MessageSquare, Plus, User, Star, Edit, Trash
 import { Routes, Route, Navigate } from "react-router-dom";
 import DashboardLayout from "@/components/DashboardLayout";
 import StatCard from "@/components/StatCard";
-import ImageUploader from "@/components/ImageUploader";
+import ImageUploadStep from "@/components/ImageUploader";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
@@ -224,7 +224,6 @@ const AddPG = () => {
   const [showCoordHelp, setShowCoordHelp] = useState(false);
   const [step, setStep] = useState<"details" | "images">("details");
   const [createdPgId, setCreatedPgId] = useState<number | null>(null);
-  const [uploadedImages, setUploadedImages] = useState<any[]>([]);
   const [form, setForm] = useState({
     name: "", location: "", city: "", monthly_rent: "",
     room_type: "single", total_rooms: "1",
@@ -276,7 +275,7 @@ const AddPG = () => {
         longitude: form.longitude ? parseFloat(form.longitude) : null,
       });
       setCreatedPgId(data.pg.id);
-      toast.success("PG details saved! Now upload at least 4 images.");
+      toast.success("PG details saved! Upload photos by category. Bedroom & Washroom are required.");
       setStep("images");
     } catch (err: any) {
       toast.error(err.message || "Failed to create PG");
@@ -500,32 +499,13 @@ const AddPG = () => {
             </form>
           )}
           {step === "images" && createdPgId && (
-            <div className="space-y-5">
-              <ImageUploader
-                pgId={createdPgId}
-                onUploadComplete={(imgs) => setUploadedImages(imgs)}
-              />
-              <div className="flex gap-3">
-                <Button variant="outline" className="flex-1" onClick={() => navigate("/owner/listings")}>
-                  Skip for now
-                </Button>
-                <Button
-                  className="flex-1"
-                  onClick={() => {
-                    if (uploadedImages.length < 4) {
-                      toast.error("Please upload at least 4 images");
-                      return;
-                    }
-                    toast.success("PG submitted for approval!");
-                    navigate("/owner/listings");
-                  }}
-                >
-                  {uploadedImages.length < 4
-                    ? `Need ${4 - uploadedImages.length} more image(s)`
-                    : "Submit for Approval"}
-                </Button>
-              </div>
-            </div>
+            <ImageUploadStep
+              pgId={createdPgId}
+              onComplete={() => {
+                toast.success("PG submitted for approval!");
+                navigate("/owner/listings");
+              }}
+            />
           )}
         </div>
       </div>
