@@ -1,7 +1,7 @@
 const express = require('express');
 const {
   submitReview, getPGReviews, getScorecard,
-  replyToReview, flagReview,
+  replyToReview, flagReview, reportReview,
   submitResidencyVerification, updateResidencyStatus, getPendingVerifications
 } = require('../controllers/review.controller');
 const { protect, restrictTo } = require('../middleware/auth.middleware');
@@ -9,15 +9,16 @@ const { protect, restrictTo } = require('../middleware/auth.middleware');
 const router = express.Router();
 
 // ─── Public Routes ────────────────────────────────────────────────────────────
-router.get('/pg/:pg_id', getPGReviews);                   // GET  /api/reviews/pg/:pg_id
-router.get('/scorecard/:pg_id', getScorecard);            // GET  /api/reviews/scorecard/:pg_id
+router.get('/pg/:pg_id', getPGReviews);                                                        // GET  /api/reviews/pg/:pg_id
+router.get('/scorecard/:pg_id', getScorecard);                                                 // GET  /api/reviews/scorecard/:pg_id
 
 // ─── Student Routes ───────────────────────────────────────────────────────────
-router.post('/', protect, restrictTo('student'), submitReview);                               // POST  /api/reviews
+router.post('/', protect, restrictTo('student'), submitReview);                                // POST  /api/reviews
 router.post('/verify-residency', protect, restrictTo('student'), submitResidencyVerification); // POST  /api/reviews/verify-residency
+router.patch('/:id/report', protect, restrictTo('student'), reportReview);                     // PATCH /api/reviews/:id/report
 
 // ─── Owner Routes ─────────────────────────────────────────────────────────────
-router.post('/:id/reply', protect, restrictTo('owner'), replyToReview);                       // POST  /api/reviews/:id/reply
+router.post('/:id/reply', protect, restrictTo('owner'), replyToReview);                        // POST  /api/reviews/:id/reply
 
 // ─── Admin Routes ─────────────────────────────────────────────────────────────
 router.get('/verify-residency/pending', protect, restrictTo('admin'), getPendingVerifications); // GET   /api/reviews/verify-residency/pending
