@@ -1,8 +1,10 @@
 // src/pages/Explore.tsx
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Filter, X, SlidersHorizontal, MapPin, Navigation, Loader2 } from "lucide-react";
+import { Filter, X, SlidersHorizontal, MapPin, Navigation, Loader2, List, Map } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
+import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import L from "leaflet";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import ScoreBadge from "@/components/ScoreBadge";
@@ -12,6 +14,24 @@ import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+// Fix broken marker icons in Vite builds
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+});
+
+// Orange pin for PG markers
+const orangeIcon = new L.Icon({
+  iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-orange.png",
+  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41],
+});
 
 const PRESET_COLLEGES = [
   "BBAU Lucknow",
@@ -30,6 +50,7 @@ const Explore = () => {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
+  const [viewMode, setViewMode] = useState<"list" | "map">("list");
 
   // Filters
   const [budget, setBudget] = useState([3000, 20000]);
@@ -52,7 +73,7 @@ const Explore = () => {
         min_rent: String(budget[0]),
         max_rent: String(budget[1]),
         sort,
-        limit: "20",
+        limit: "50",
       };
       if (roomType !== "all") filters.room_type = roomType;
       if (acRequired) filters.has_ac = "true";
@@ -69,11 +90,9 @@ const Explore = () => {
     }
   }, [budget, roomType, sort, acRequired, foodIncluded, search]);
 
-  useEffect(() => {
-    fetchPGs();
-  }, [fetchPGs]);
+  useEffect(() => { fetchPGs(); }, [fetchPGs]);
 
-  // Re-calculate distances whenever PGs list changes and a college is already set
+  // Re-calculate distances when PG list changes and a college is already set
   useEffect(() => {
     if (collegeQuery && pgs.length > 0) {
       calculateDistances(collegeQuery, pgs);
@@ -91,7 +110,7 @@ const Explore = () => {
 
   const getPriceLabel = (pg: any) => {
     if (pg.price_label === "underpriced") return { text: "Underpriced", cls: "bg-success text-white" };
-    if (pg.price_label === "overpriced") return { text: "Overpriced", cls: "bg-warning text-white" };
+    if (pg.price_label === "overpriced")  return { text: "Overpriced",  cls: "bg-warning text-white" };
     return { text: "Fair Price", cls: "bg-primary text-white" };
   };
 
@@ -112,6 +131,12 @@ const Explore = () => {
     setCollegeInput("");
     setCollegeQuery("");
   };
+
+  // PGs that have coordinates — used by map view
+  const pgsWithCoords = pgs.filter(pg => pg.latitude && pg.longitude);
+  const mapCenter: [number, number] = pgsWithCoords.length > 0
+    ? [pgsWithCoords[0].latitude, pgsWithCoords[0].longitude]
+    : [27.6059, 77.5940]; // fallback: GLA University Mathura
 
   const filterContent = (
     <div className="space-y-6">
@@ -162,9 +187,7 @@ const Explore = () => {
         </div>
       </div>
 
-      <Button variant="outline" onClick={resetFilters} className="w-full">
-        Reset Filters
-      </Button>
+      <Button variant="outline" onClick={resetFilters} className="w-full">Reset Filters</Button>
     </div>
   );
 
@@ -172,16 +195,43 @@ const Explore = () => {
     <div className="min-h-screen bg-background">
       <Navbar />
       <div className="container mx-auto px-4 py-8">
+
+        {/* ── Header ── */}
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
           className="flex items-center justify-between">
           <h1 className="text-2xl font-extrabold text-foreground md:text-3xl">Find Your Perfect PG</h1>
-          <button onClick={() => setShowFilters(true)}
-            className="lg:hidden flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2 text-sm font-medium text-foreground hover:border-primary/30 transition-colors">
-            <Filter className="h-4 w-4 text-primary" /> Filters
-          </button>
+          <div className="flex items-center gap-2">
+            {/* List / Map toggle */}
+            <div className="flex items-center gap-1 rounded-xl border border-border bg-card p-1">
+              <button
+                onClick={() => setViewMode("list")}
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                  viewMode === "list"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <List className="h-4 w-4" /> List
+              </button>
+              <button
+                onClick={() => setViewMode("map")}
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                  viewMode === "map"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <Map className="h-4 w-4" /> Map
+              </button>
+            </div>
+            <button onClick={() => setShowFilters(true)}
+              className="lg:hidden flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2 text-sm font-medium text-foreground hover:border-primary/30 transition-colors">
+              <Filter className="h-4 w-4 text-primary" /> Filters
+            </button>
+          </div>
         </motion.div>
 
-        {/* Search bar */}
+        {/* ── Search bar ── */}
         <div className="mt-4">
           <input
             placeholder="Search by PG name or location..."
@@ -192,37 +242,29 @@ const Explore = () => {
         </div>
 
         {/* ── Distance from college ── */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="mt-4 rounded-2xl border border-border bg-card p-4"
-        >
+          className="mt-4 rounded-2xl border border-border bg-card p-4">
           <div className="flex items-center gap-2 mb-3">
             <Navigation className="h-4 w-4 text-primary" />
             <span className="text-sm font-medium text-foreground">Distance from college / workplace</span>
             {collegeQuery && (
-              <button
-                onClick={handleClearDistance}
-                className="ml-auto flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-              >
+              <button onClick={handleClearDistance}
+                className="ml-auto flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
                 <X className="h-3 w-3" /> Clear
               </button>
             )}
           </div>
 
-          {/* Preset quick-select buttons */}
+          {/* Preset quick-select */}
           <div className="flex flex-wrap gap-2 mb-3">
             {PRESET_COLLEGES.map((c) => (
-              <button
-                key={c}
-                onClick={() => handlePreset(c)}
+              <button key={c} onClick={() => handlePreset(c)}
                 className={`rounded-full border px-3 py-1 text-xs transition-colors ${
                   collegeQuery === c
                     ? "border-primary bg-primary/10 text-primary font-medium"
                     : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
-                }`}
-              >
+                }`}>
                 {c}
               </button>
             ))}
@@ -237,18 +279,12 @@ const Explore = () => {
               onKeyDown={(e) => e.key === "Enter" && handleDistanceSearch()}
               className="flex-1 rounded-xl border border-border bg-secondary/50 py-2 px-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
             />
-            <Button
-              onClick={handleDistanceSearch}
-              disabled={distLoading || !collegeInput.trim()}
-              size="sm"
-            >
+            <Button onClick={handleDistanceSearch} disabled={distLoading || !collegeInput.trim()} size="sm">
               {distLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Search"}
             </Button>
           </div>
 
-          {distError && (
-            <p className="mt-2 text-xs text-destructive">{distError}</p>
-          )}
+          {distError && <p className="mt-2 text-xs text-destructive">{distError}</p>}
           {collegeQuery && !distLoading && !distError && (
             <p className="mt-2 text-xs text-muted-foreground">
               Showing road distances from{" "}
@@ -258,7 +294,7 @@ const Explore = () => {
         </motion.div>
 
         <div className="mt-6 flex gap-8">
-          {/* Desktop filters */}
+          {/* ── Desktop filters ── */}
           <aside className="hidden lg:block w-72 shrink-0">
             <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
               className="sticky top-24 rounded-2xl border border-border bg-card p-6 shadow-sm">
@@ -266,7 +302,7 @@ const Explore = () => {
             </motion.div>
           </aside>
 
-          {/* Mobile filter drawer */}
+          {/* ── Mobile filter drawer ── */}
           <AnimatePresence>
             {showFilters && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -291,12 +327,17 @@ const Explore = () => {
             )}
           </AnimatePresence>
 
-          {/* Results */}
+          {/* ── Main content ── */}
           <div className="flex-1 min-w-0">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
               className="flex items-center justify-between mb-5">
               <p className="text-sm text-muted-foreground">
                 <span className="font-semibold text-foreground">{total}</span> PGs found
+                {viewMode === "map" && pgs.length > 0 && pgsWithCoords.length < pgs.length && (
+                  <span className="ml-2 text-xs text-orange-500">
+                    · {pgs.length - pgsWithCoords.length} hidden (no coordinates)
+                  </span>
+                )}
               </p>
               <Select value={sort} onValueChange={setSort}>
                 <SelectTrigger className="w-48 border-border bg-card rounded-xl">
@@ -312,96 +353,161 @@ const Explore = () => {
               </Select>
             </motion.div>
 
-            {loading ? (
-              <div className="space-y-4">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="h-40 animate-pulse rounded-2xl bg-secondary/50" />
-                ))}
-              </div>
-            ) : pgs.length === 0 ? (
-              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
-                className="py-20 text-center">
-                <Filter className="mx-auto h-12 w-12 text-muted-foreground/30" />
-                <p className="mt-4 text-lg font-medium text-muted-foreground">No PGs found</p>
-                <p className="mt-1 text-sm text-muted-foreground">Try adjusting your filters.</p>
-                <Button variant="outline" size="sm" onClick={resetFilters} className="mt-4">Reset Filters</Button>
+            {/* ════ MAP VIEW ════ */}
+            {viewMode === "map" && (
+              <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }}
+                className="rounded-2xl overflow-hidden border border-border shadow-sm"
+                style={{ height: "560px" }}>
+                {loading ? (
+                  <div className="flex h-full items-center justify-center bg-secondary/30">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  </div>
+                ) : pgsWithCoords.length === 0 ? (
+                  <div className="flex h-full flex-col items-center justify-center bg-secondary/30 text-center p-8">
+                    <MapPin className="h-12 w-12 text-muted-foreground/30 mb-3" />
+                    <p className="font-medium text-muted-foreground">No PGs have coordinates yet</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Latitude & longitude need to be saved when a PG is listed
+                    </p>
+                  </div>
+                ) : (
+                  <MapContainer center={mapCenter} zoom={13}
+                    style={{ height: "100%", width: "100%" }}
+                    scrollWheelZoom={true}>
+                    <TileLayer
+                      attribution='© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    />
+                    {pgsWithCoords.map((pg) => {
+                      const dist = distances[pg.id];
+                      return (
+                        <Marker key={pg.id} position={[pg.latitude, pg.longitude]} icon={orangeIcon}>
+                          <Popup>
+                            <div style={{ minWidth: 180 }}>
+                              {pg.primary_image && (
+                                <img src={pg.primary_image} alt={pg.name}
+                                  style={{ width: "100%", height: 80, objectFit: "cover", borderRadius: 6, marginBottom: 6 }} />
+                              )}
+                              <p style={{ fontWeight: 700, fontSize: 13, margin: 0 }}>{pg.name}</p>
+                              <p style={{ fontSize: 11, color: "#888", margin: "2px 0" }}>{pg.location}</p>
+                              <p style={{ fontSize: 13, fontWeight: 600, color: "#f97316", margin: "4px 0" }}>
+                                ₹{pg.monthly_rent?.toLocaleString()}/mo
+                              </p>
+                              {dist?.distance_km && (
+                                <p style={{ fontSize: 11, color: "#3b82f6", margin: "2px 0" }}>
+                                  📍 {dist.distance_km} km · {dist.duration_min} min drive
+                                </p>
+                              )}
+                              <a href={`/pg/${pg.id}`}
+                                style={{
+                                  display: "block", marginTop: 8, textAlign: "center",
+                                  background: "#f97316", color: "#fff", borderRadius: 6,
+                                  padding: "4px 10px", fontSize: 12, textDecoration: "none"
+                                }}>
+                                View Details →
+                              </a>
+                            </div>
+                          </Popup>
+                        </Marker>
+                      );
+                    })}
+                  </MapContainer>
+                )}
               </motion.div>
-            ) : (
-              <div className="space-y-4">
-                {pgs.map((pg, i) => {
-                  const priceLabel = getPriceLabel(pg);
-                  const distInfo = distances[pg.id];
-                  return (
-                    <motion.div key={pg.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: i * 0.05 }}
-                      className="flex gap-4 rounded-2xl border border-border bg-card p-4 hover:shadow-md transition-all">
-                      {/* Image */}
-                      <div className="relative h-36 w-48 shrink-0 overflow-hidden rounded-xl">
-                        {pg.primary_image ? (
-                          <img src={pg.primary_image} alt={pg.name} className="h-full w-full object-cover" />
-                        ) : (
-                          <div className="h-full w-full bg-secondary/50 flex items-center justify-center text-xs text-muted-foreground">No Image</div>
-                        )}
-                        <span className={`absolute bottom-2 left-2 rounded-full px-2 py-0.5 text-xs font-semibold ${priceLabel.cls}`}>
-                          {priceLabel.text}
-                        </span>
-                      </div>
+            )}
 
-                      {/* Info */}
-                      <div className="flex flex-1 flex-col justify-between">
-                        <div>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <h3 className="font-bold text-foreground">{pg.name}</h3>
-                            {pg.status === 'approved' && (
-                              <span className="inline-flex items-center gap-1 rounded-full border border-success/30 bg-success/10 px-2 py-0.5 text-xs font-medium text-success">
-                                ✓ Verified
-                              </span>
+            {/* ════ LIST VIEW ════ */}
+            {viewMode === "list" && (
+              <>
+                {loading ? (
+                  <div className="space-y-4">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="h-40 animate-pulse rounded-2xl bg-secondary/50" />
+                    ))}
+                  </div>
+                ) : pgs.length === 0 ? (
+                  <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+                    className="py-20 text-center">
+                    <Filter className="mx-auto h-12 w-12 text-muted-foreground/30" />
+                    <p className="mt-4 text-lg font-medium text-muted-foreground">No PGs found</p>
+                    <p className="mt-1 text-sm text-muted-foreground">Try adjusting your filters.</p>
+                    <Button variant="outline" size="sm" onClick={resetFilters} className="mt-4">Reset Filters</Button>
+                  </motion.div>
+                ) : (
+                  <div className="space-y-4">
+                    {pgs.map((pg, i) => {
+                      const priceLabel = getPriceLabel(pg);
+                      const distInfo = distances[pg.id];
+                      return (
+                        <motion.div key={pg.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: i * 0.05 }}
+                          className="flex gap-4 rounded-2xl border border-border bg-card p-4 hover:shadow-md transition-all">
+                          {/* Image */}
+                          <div className="relative h-36 w-48 shrink-0 overflow-hidden rounded-xl">
+                            {pg.primary_image ? (
+                              <img src={pg.primary_image} alt={pg.name} className="h-full w-full object-cover" />
+                            ) : (
+                              <div className="h-full w-full bg-secondary/50 flex items-center justify-center text-xs text-muted-foreground">No Image</div>
                             )}
+                            <span className={`absolute bottom-2 left-2 rounded-full px-2 py-0.5 text-xs font-semibold ${priceLabel.cls}`}>
+                              {priceLabel.text}
+                            </span>
                           </div>
-                          <p className="mt-1 flex items-center gap-1 text-sm text-muted-foreground">
-                            <MapPin className="h-3.5 w-3.5" /> {pg.location}
-                          </p>
 
-                          {/* ── Distance badge ── */}
-                          {distInfo && distInfo.distance_km !== null ? (
-                            <p className="mt-1 flex items-center gap-1 text-xs font-medium text-primary">
-                              <Navigation className="h-3 w-3" />
-                              {distInfo.distance_km} km by road · ~{distInfo.duration_min} min
-                            </p>
-                          ) : distLoading && collegeQuery && !distInfo ? (
-                            <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
-                              <Loader2 className="h-3 w-3 animate-spin" /> Calculating distance...
-                            </p>
-                          ) : null}
-
-                          <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                            {pg.hygiene_score > 0 && <span>Hygiene: {pg.hygiene_score}/100</span>}
-                            <span className="capitalize">{pg.room_type}</span>
-                            {pg.has_ac && <span>AC</span>}
-                            {pg.has_meals && <span>Meals</span>}
-                            {pg.has_wifi && <span>WiFi</span>}
+                          {/* Info */}
+                          <div className="flex flex-1 flex-col justify-between">
+                            <div>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <h3 className="font-bold text-foreground">{pg.name}</h3>
+                                {pg.status === "approved" && (
+                                  <span className="inline-flex items-center gap-1 rounded-full border border-success/30 bg-success/10 px-2 py-0.5 text-xs font-medium text-success">
+                                    ✓ Verified
+                                  </span>
+                                )}
+                              </div>
+                              <p className="mt-1 flex items-center gap-1 text-sm text-muted-foreground">
+                                <MapPin className="h-3.5 w-3.5" /> {pg.location}
+                              </p>
+                              {distInfo && distInfo.distance_km !== null ? (
+                                <p className="mt-1 flex items-center gap-1 text-xs font-medium text-primary">
+                                  <Navigation className="h-3 w-3" />
+                                  {distInfo.distance_km} km by road · ~{distInfo.duration_min} min
+                                </p>
+                              ) : distLoading && collegeQuery && !distInfo ? (
+                                <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                                  <Loader2 className="h-3 w-3 animate-spin" /> Calculating distance...
+                                </p>
+                              ) : null}
+                              <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                                {pg.hygiene_score > 0 && <span>Hygiene: {pg.hygiene_score}/100</span>}
+                                <span className="capitalize">{pg.room_type}</span>
+                                {pg.has_ac && <span>AC</span>}
+                                {pg.has_meals && <span>Meals</span>}
+                                {pg.has_wifi && <span>WiFi</span>}
+                              </div>
+                            </div>
+                            <div className="mt-3 flex items-center justify-between">
+                              <div>
+                                <span className="text-xl font-extrabold text-foreground">₹{pg.monthly_rent?.toLocaleString()}</span>
+                                <span className="text-xs text-muted-foreground"> /month</span>
+                              </div>
+                              <Link to={`/pg/${pg.id}`}>
+                                <Button size="sm">View Details</Button>
+                              </Link>
+                            </div>
                           </div>
-                        </div>
-                        <div className="mt-3 flex items-center justify-between">
-                          <div>
-                            <span className="text-xl font-extrabold text-foreground">₹{pg.monthly_rent?.toLocaleString()}</span>
-                            <span className="text-xs text-muted-foreground"> /month</span>
-                          </div>
-                          <Link to={`/pg/${pg.id}`}>
-                            <Button size="sm">View Details</Button>
-                          </Link>
-                        </div>
-                      </div>
 
-                      {/* Score */}
-                      <div className="hidden sm:flex flex-col items-center justify-center">
-                        <ScoreBadge score={pg.overall_score || 0} size="sm" />
-                        <span className="mt-1 text-xs text-muted-foreground">Overall</span>
-                      </div>
-                    </motion.div>
-                  );
-                })}
-              </div>
+                          {/* Score */}
+                          <div className="hidden sm:flex flex-col items-center justify-center">
+                            <ScoreBadge score={pg.overall_score || 0} size="sm" />
+                            <span className="mt-1 text-xs text-muted-foreground">Overall</span>
+                          </div>
+                        </motion.div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
