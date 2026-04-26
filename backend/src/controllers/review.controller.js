@@ -131,9 +131,23 @@ const submitReview = async (req, res) => {
       amenities_rating, overall_rating, review_text, is_anonymous
     } = req.body;
 
+    // ── Input validation ──────────────────────────────────────────────────────
     if (!pg_id || !hygiene_rating || !food_rating || !safety_rating || !amenities_rating || !overall_rating) {
       return res.status(400).json({ message: 'PG ID and all ratings are required' });
     }
+    if (isNaN(parseInt(pg_id))) {
+      return res.status(400).json({ message: 'Invalid PG ID' });
+    }
+    const ratings = [hygiene_rating, food_rating, safety_rating, amenities_rating, overall_rating];
+    for (const r of ratings) {
+      if (Number(r) < 1 || Number(r) > 5 || isNaN(Number(r))) {
+        return res.status(400).json({ message: 'All ratings must be between 1 and 5' });
+      }
+    }
+    if (review_text && review_text.length > 2000) {
+      return res.status(400).json({ message: 'Review text too long (max 2000 characters)' });
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     const pgCheck = await pool.query(
       `SELECT id FROM pgs WHERE id = $1 AND status = 'approved'`, [pg_id]
@@ -290,6 +304,9 @@ const replyToReview = async (req, res) => {
     if (!reply) {
       return res.status(400).json({ message: 'Reply text is required' });
     }
+    if (reply.length > 1000) {
+      return res.status(400).json({ message: 'Reply too long (max 1000 characters)' });
+    }
 
     const check = await pool.query(`
       SELECT r.id FROM reviews r
@@ -317,16 +334,11 @@ const replyToReview = async (req, res) => {
 };
 
 // ─── ADMIN: FLAG / APPROVE REVIEW ─────────────────────────────────────────────
-// PATCH /api/reviews/:id/flag
-// - Flagging:  is_flagged = true,  flagged_by = 'admin', is_approved = true  (still visible)
-// - Approving: is_flagged = false, flagged_by = null,    is_approved = true  (clears flag)
-// - Removing:  is_flagged = true,  flagged_by = 'admin', is_approved = false (hidden)
 const flagReview = async (req, res) => {
   try {
     const { id } = req.params;
     const { is_approved } = req.body;
 
-    // Check current state to decide if admin is clearing a flag or setting one
     const current = await pool.query(
       'SELECT is_flagged, flagged_by FROM reviews WHERE id = $1', [id]
     );
@@ -335,7 +347,6 @@ const flagReview = async (req, res) => {
     }
 
     const isClearing = is_approved === true && current.rows[0].is_flagged === true;
-
     const newIsFlagged = isClearing ? false : true;
     const newFlaggedBy = isClearing ? null : 'admin';
     const newIsApproved = is_approved !== false;
@@ -357,13 +368,10 @@ const flagReview = async (req, res) => {
 };
 
 // ─── STUDENT: REPORT A REVIEW ─────────────────────────────────────────────────
-// PATCH /api/reviews/:id/report
-// Marks review as flagged by a student — stays visible, admin decides what to do
 const reportReview = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Safely add column if it doesn't exist yet (runs once, harmless after that)
     await pool.query(`
       ALTER TABLE reviews ADD COLUMN IF NOT EXISTS flagged_by VARCHAR(20) DEFAULT NULL
     `);

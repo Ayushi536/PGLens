@@ -1,4 +1,5 @@
 const express = require('express');
+const rateLimit = require('express-rate-limit');
 const cors = require('cors');
 const passport = require('./config/passport');
 const { initDB } = require('./config/db');
@@ -20,6 +21,12 @@ app.use(cors({
     process.env.CLIENT_URL
   ].filter(Boolean),
   credentials: true
+}));
+
+app.use('/api', rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: { message: 'Too many requests, please try again later.' }
 }));
 
 app.use(express.json());
