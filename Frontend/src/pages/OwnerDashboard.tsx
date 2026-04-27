@@ -1,6 +1,6 @@
 // src/pages/OwnerDashboard.tsx
 import { useState, useEffect } from "react";
-import { Home, Building, BarChart3, MessageSquare, Plus, User, Star, Edit, Trash2, Eye, MapPin, Loader2, Navigation, HelpCircle, ChevronDown } from "lucide-react";
+import { Home, Building, BarChart3, MessageSquare, Plus, User, Star, Edit, Trash2, Eye, MapPin, Loader2, Navigation, HelpCircle, ChevronDown, X } from "lucide-react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import DashboardLayout from "@/components/DashboardLayout";
 import StatCard from "@/components/StatCard";
@@ -115,10 +115,196 @@ const OwnerHome = () => {
   );
 };
 
+// ─── Edit PG Modal ────────────────────────────────────────────────────────────
+// Opens as an overlay when owner clicks Edit on a listing
+const EditPGModal = ({ pg, onClose, onSaved }: { pg: any; onClose: () => void; onSaved: (updated: any) => void }) => {
+  const [loading, setLoading] = useState(false);
+  const [form, setForm] = useState({
+    name:         pg.name         || "",
+    location:     pg.location     || "",
+    city:         pg.city         || "",
+    monthly_rent: String(pg.monthly_rent || ""),
+    room_type:    pg.room_type    || "single",
+    total_rooms:  String(pg.total_rooms || "1"),
+    has_wifi:     pg.has_wifi     || false,
+    has_ac:       pg.has_ac       || false,
+    has_meals:    pg.has_meals    || false,
+    has_laundry:  pg.has_laundry  || false,
+    has_parking:  pg.has_parking  || false,
+    has_security: pg.has_security || false,
+    has_gym:      pg.has_gym      || false,
+    has_hot_water:pg.has_hot_water|| false,
+    has_tv:       pg.has_tv       || false,
+  });
+
+  const amenities = [
+    { key: "has_wifi", label: "WiFi" }, { key: "has_ac", label: "AC" },
+    { key: "has_meals", label: "Meals" }, { key: "has_laundry", label: "Laundry" },
+    { key: "has_parking", label: "Parking" }, { key: "has_security", label: "Security" },
+    { key: "has_gym", label: "Gym" }, { key: "has_hot_water", label: "Hot Water" },
+    { key: "has_tv", label: "TV" },
+  ];
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.name || !form.location || !form.city || !form.monthly_rent) {
+      toast.error("Please fill in all required fields");
+      return;
+    }
+    setLoading(true);
+    try {
+      const data = await pgAPI.update(pg.id, {
+        ...form,
+        monthly_rent: parseInt(form.monthly_rent),
+        total_rooms: parseInt(form.total_rooms),
+      });
+      toast.success("PG updated! It will be re-reviewed by admin.");
+      onSaved(data.pg);
+      onClose();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update PG");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Trap scroll on body while modal is open
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = ""; };
+  }, []);
+
+  return (
+    // ── Backdrop ──
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/30 backdrop-blur-sm p-4"
+      onClick={onClose}
+    >
+      {/* ── Modal box ── */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 20 }}
+        transition={{ duration: 0.2 }}
+        onClick={(e) => e.stopPropagation()}
+        className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-border bg-card shadow-2xl"
+      >
+        {/* Header */}
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-card px-6 py-4">
+          <div>
+            <h2 className="text-lg font-bold text-foreground">Edit PG</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Changes will reset PG to <span className="text-warning font-medium">Pending</span> — admin must re-approve
+            </p>
+          </div>
+          <Button variant="ghost" size="icon" className="rounded-xl" onClick={onClose}>
+            <X className="h-5 w-5" />
+          </Button>
+        </div>
+
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+
+          {/* Name + Location */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-foreground">PG Name *</label>
+              <input
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                className="w-full rounded-xl border border-border bg-secondary/50 p-2.5 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                placeholder="Enter PG name"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-foreground">Location *</label>
+              <input
+                value={form.location}
+                onChange={(e) => setForm({ ...form, location: e.target.value })}
+                className="w-full rounded-xl border border-border bg-secondary/50 p-2.5 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                placeholder="Area, City"
+              />
+            </div>
+          </div>
+
+          {/* City + Rent + Room type */}
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-foreground">City *</label>
+              <input
+                value={form.city}
+                onChange={(e) => setForm({ ...form, city: e.target.value })}
+                className="w-full rounded-xl border border-border bg-secondary/50 p-2.5 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                placeholder="Lucknow"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-foreground">Monthly Rent (₹) *</label>
+              <input
+                type="number"
+                value={form.monthly_rent}
+                onChange={(e) => setForm({ ...form, monthly_rent: e.target.value })}
+                className="w-full rounded-xl border border-border bg-secondary/50 p-2.5 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                placeholder="8000"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-foreground">Room Type *</label>
+              <select
+                value={form.room_type}
+                onChange={(e) => setForm({ ...form, room_type: e.target.value })}
+                className="w-full rounded-xl border border-border bg-secondary/50 p-2.5 text-sm text-foreground focus:border-primary focus:outline-none"
+              >
+                <option value="single">Single</option>
+                <option value="double">Double</option>
+                <option value="triple">Triple</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Amenities */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-foreground">Amenities</label>
+            <div className="grid grid-cols-3 gap-2">
+              {amenities.map((a) => (
+                <label key={a.key} className="flex items-center gap-2 rounded-lg border border-border p-2 text-sm hover:bg-secondary/30 cursor-pointer transition-colors">
+                  <input
+                    type="checkbox"
+                    className="accent-primary"
+                    checked={(form as any)[a.key]}
+                    onChange={(e) => setForm({ ...form, [a.key]: e.target.checked })}
+                  />
+                  {a.label}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* Info note */}
+          <div className="rounded-xl border border-warning/30 bg-warning/5 px-4 py-3 text-xs text-warning">
+            ⚠️ After saving, your PG status will change to <strong>Pending</strong> until admin reviews the changes. It will temporarily be hidden from students.
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-3 pt-1">
+            <Button type="button" variant="outline" className="flex-1" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" className="flex-1" disabled={loading}>
+              {loading ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Saving...</> : "Save Changes"}
+            </Button>
+          </div>
+        </form>
+      </motion.div>
+    </div>
+  );
+};
+
 // ─── My Listings ──────────────────────────────────────────────────────────────
 const MyListings = () => {
   const [listings, setListings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [editingPG, setEditingPG] = useState<any | null>(null); // ← which PG is being edited
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -139,80 +325,111 @@ const MyListings = () => {
     }
   };
 
+  // Called when edit modal saves successfully — update the row in table
+  const handlePGSaved = (updatedPG: any) => {
+    setListings((prev) =>
+      prev.map((pg) => pg.id === updatedPG.id ? { ...pg, ...updatedPG } : pg)
+    );
+  };
+
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-bold text-foreground">My PG Listings</h2>
-        <Button size="sm" className="gap-2" onClick={() => navigate("/owner/add")}>
-          <Plus className="h-4 w-4" /> Add New PG
-        </Button>
-      </div>
-      {loading ? (
-        <div className="h-48 animate-pulse rounded-2xl bg-secondary/50" />
-      ) : listings.length === 0 ? (
-        <div className="rounded-2xl border border-border bg-card p-12 text-center">
-          <Building className="mx-auto h-10 w-10 text-muted-foreground/30" />
-          <p className="mt-3 text-muted-foreground">No listings yet.</p>
-          <Button className="mt-4" size="sm" onClick={() => navigate("/owner/add")}>Add Your First PG</Button>
-        </div>
-      ) : (
-        <div className="overflow-x-auto rounded-2xl border border-border bg-card">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-secondary/30">
-                <th className="px-4 py-3 text-left font-semibold text-foreground">PG Name</th>
-                <th className="px-4 py-3 text-left font-semibold text-foreground">Status</th>
-                <th className="px-4 py-3 text-left font-semibold text-foreground">Score</th>
-                <th className="px-4 py-3 text-left font-semibold text-foreground">Price</th>
-                <th className="px-4 py-3 text-right font-semibold text-foreground">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {listings.map((pg) => (
-                <tr key={pg.id} className="border-b border-border last:border-0 hover:bg-secondary/20 transition-colors">
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      {pg.primary_image ? (
-                        <img src={pg.primary_image} alt="" className="h-10 w-10 rounded-lg object-cover" />
-                      ) : (
-                        <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center text-xs text-primary font-bold">PG</div>
-                      )}
-                      <div>
-                        <span className="font-medium text-foreground">{pg.name}</span>
-                        {pg.latitude && pg.longitude && (
-                          <p className="flex items-center gap-1 text-xs text-success mt-0.5">
-                            <Navigation className="h-3 w-3" /> Location mapped
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                      pg.status === 'approved' ? 'bg-success/10 text-success' :
-                      pg.status === 'pending' ? 'bg-warning/10 text-warning' :
-                      'bg-destructive/10 text-destructive'
-                    }`}>{pg.status?.charAt(0).toUpperCase() + pg.status?.slice(1)}</span>
-                  </td>
-                  <td className="px-4 py-3 text-foreground">{pg.overall_score || 0}/100</td>
-                  <td className="px-4 py-3 text-foreground">₹{pg.monthly_rent?.toLocaleString()}</td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex justify-end gap-1">
-                      <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={() => navigate(`/pg/${pg.id}`)}>
-                        <Eye className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-destructive" onClick={() => handleDelete(pg.id)}>
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+    <>
+      {/* Edit modal — rendered on top of everything */}
+      {editingPG && (
+        <EditPGModal
+          pg={editingPG}
+          onClose={() => setEditingPG(null)}
+          onSaved={handlePGSaved}
+        />
       )}
-    </div>
+
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold text-foreground">My PG Listings</h2>
+          <Button size="sm" className="gap-2" onClick={() => navigate("/owner/add")}>
+            <Plus className="h-4 w-4" /> Add New PG
+          </Button>
+        </div>
+
+        {loading ? (
+          <div className="h-48 animate-pulse rounded-2xl bg-secondary/50" />
+        ) : listings.length === 0 ? (
+          <div className="rounded-2xl border border-border bg-card p-12 text-center">
+            <Building className="mx-auto h-10 w-10 text-muted-foreground/30" />
+            <p className="mt-3 text-muted-foreground">No listings yet.</p>
+            <Button className="mt-4" size="sm" onClick={() => navigate("/owner/add")}>Add Your First PG</Button>
+          </div>
+        ) : (
+          <div className="overflow-x-auto rounded-2xl border border-border bg-card">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-secondary/30">
+                  <th className="px-4 py-3 text-left font-semibold text-foreground">PG Name</th>
+                  <th className="px-4 py-3 text-left font-semibold text-foreground">Status</th>
+                  <th className="px-4 py-3 text-left font-semibold text-foreground">Score</th>
+                  <th className="px-4 py-3 text-left font-semibold text-foreground">Price</th>
+                  <th className="px-4 py-3 text-right font-semibold text-foreground">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {listings.map((pg) => (
+                  <tr key={pg.id} className="border-b border-border last:border-0 hover:bg-secondary/20 transition-colors">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        {pg.primary_image ? (
+                          <img src={pg.primary_image} alt="" className="h-10 w-10 rounded-lg object-cover" />
+                        ) : (
+                          <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center text-xs text-primary font-bold">PG</div>
+                        )}
+                        <div>
+                          <span className="font-medium text-foreground">{pg.name}</span>
+                          {pg.latitude && pg.longitude && (
+                            <p className="flex items-center gap-1 text-xs text-success mt-0.5">
+                              <Navigation className="h-3 w-3" /> Location mapped
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                        pg.status === 'approved' ? 'bg-success/10 text-success' :
+                        pg.status === 'pending' ? 'bg-warning/10 text-warning' :
+                        'bg-destructive/10 text-destructive'
+                      }`}>{pg.status?.charAt(0).toUpperCase() + pg.status?.slice(1)}</span>
+                    </td>
+                    <td className="px-4 py-3 text-foreground">{pg.overall_score || 0}/100</td>
+                    <td className="px-4 py-3 text-foreground">₹{pg.monthly_rent?.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex justify-end gap-1">
+                        {/* View button */}
+                        <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={() => navigate(`/pg/${pg.id}`)}>
+                          <Eye className="h-3.5 w-3.5" />
+                        </Button>
+                        {/* Edit button — NEW */}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 rounded-lg text-primary hover:bg-primary/10"
+                          title="Edit PG"
+                          onClick={() => setEditingPG(pg)}
+                        >
+                          <Edit className="h-3.5 w-3.5" />
+                        </Button>
+                        {/* Delete button */}
+                        <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-destructive" onClick={() => handleDelete(pg.id)}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </>
   );
 };
 
@@ -233,7 +450,6 @@ const AddPG = () => {
     has_gym: false, has_hot_water: false, has_tv: false,
   });
 
-  // Auto-detect coordinates from location + city
   const handleAutoDetect = async () => {
     const address = [form.location, form.city].filter(Boolean).join(", ");
     if (!address.trim()) {
@@ -352,7 +568,7 @@ const AddPG = () => {
                 </div>
               </div>
 
-              {/* ── Location / Coordinates ── */}
+              {/* Location / Coordinates */}
               <div className="rounded-xl border border-border bg-secondary/20 p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
@@ -364,81 +580,41 @@ const AddPG = () => {
                       Required for distance calculation on Explore page
                     </p>
                   </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleAutoDetect}
-                    disabled={geoLoading}
-                    className="gap-1.5 shrink-0"
-                  >
-                    {geoLoading
-                      ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Detecting...</>
-                      : <><MapPin className="h-3.5 w-3.5" /> Auto-detect</>
-                    }
+                  <Button type="button" variant="outline" size="sm" onClick={handleAutoDetect} disabled={geoLoading} className="gap-1.5 shrink-0">
+                    {geoLoading ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Detecting...</> : <><MapPin className="h-3.5 w-3.5" /> Auto-detect</>}
                   </Button>
                 </div>
 
                 {form.latitude && form.longitude ? (
                   <div className="flex items-center gap-2 rounded-lg bg-success/10 border border-success/20 px-3 py-2">
                     <Navigation className="h-4 w-4 text-success shrink-0" />
-                    <span className="text-xs text-success font-medium">
-                      Location detected: {form.latitude}, {form.longitude}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setForm({ ...form, latitude: "", longitude: "" })}
-                      className="ml-auto text-xs text-muted-foreground hover:text-foreground"
-                    >
-                      Clear
-                    </button>
+                    <span className="text-xs text-success font-medium">Location detected: {form.latitude}, {form.longitude}</span>
+                    <button type="button" onClick={() => setForm({ ...form, latitude: "", longitude: "" })} className="ml-auto text-xs text-muted-foreground hover:text-foreground">Clear</button>
                   </div>
                 ) : (
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="space-y-1">
                       <label className="text-xs text-muted-foreground">Latitude (optional)</label>
-                      <input
-                        type="number"
-                        step="any"
-                        value={form.latitude}
-                        onChange={(e) => setForm({ ...form, latitude: e.target.value })}
-                        placeholder="e.g. 27.6058"
-                        className="w-full rounded-xl border border-border bg-secondary/50 p-2.5 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                      />
+                      <input type="number" step="any" value={form.latitude} onChange={(e) => setForm({ ...form, latitude: e.target.value })} placeholder="e.g. 27.6058"
+                        className="w-full rounded-xl border border-border bg-secondary/50 p-2.5 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" />
                     </div>
                     <div className="space-y-1">
                       <label className="text-xs text-muted-foreground">Longitude (optional)</label>
-                      <input
-                        type="number"
-                        step="any"
-                        value={form.longitude}
-                        onChange={(e) => setForm({ ...form, longitude: e.target.value })}
-                        placeholder="e.g. 77.5945"
-                        className="w-full rounded-xl border border-border bg-secondary/50 p-2.5 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                      />
+                      <input type="number" step="any" value={form.longitude} onChange={(e) => setForm({ ...form, longitude: e.target.value })} placeholder="e.g. 77.5945"
+                        className="w-full rounded-xl border border-border bg-secondary/50 p-2.5 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" />
                     </div>
                   </div>
                 )}
 
-                {/* ── Help finding coordinates ── */}
                 <div className="rounded-lg border border-border overflow-hidden">
-                  <button
-                    type="button"
-                    onClick={() => setShowCoordHelp((v) => !v)}
-                    className="w-full flex items-center justify-between px-3 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary/30 transition-colors"
-                  >
-                    <span className="flex items-center gap-1.5">
-                      <HelpCircle className="h-3.5 w-3.5" />
-                      Need help finding latitude &amp; longitude?
-                    </span>
+                  <button type="button" onClick={() => setShowCoordHelp((v) => !v)}
+                    className="w-full flex items-center justify-between px-3 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary/30 transition-colors">
+                    <span className="flex items-center gap-1.5"><HelpCircle className="h-3.5 w-3.5" />Need help finding latitude &amp; longitude?</span>
                     <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showCoordHelp ? "rotate-180" : ""}`} />
                   </button>
-
                   {showCoordHelp && (
                     <div className="px-4 pb-4 pt-1 space-y-3 border-t border-border bg-secondary/10">
                       <p className="text-xs font-medium text-foreground mt-2">3 easy ways to find coordinates:</p>
-
-                      {/* Method 1 */}
                       <div className="space-y-1.5">
                         <p className="text-xs font-medium text-primary">Method 1 — Auto-detect (Recommended)</p>
                         <ol className="text-xs text-muted-foreground space-y-1 list-none">
@@ -447,31 +623,25 @@ const AddPG = () => {
                           <li className="flex items-start gap-2"><span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary font-bold text-[10px]">3</span>Coordinates are filled automatically!</li>
                         </ol>
                       </div>
-
                       <div className="h-px bg-border" />
-
-                      {/* Method 2 */}
                       <div className="space-y-1.5">
                         <p className="text-xs font-medium text-foreground">Method 2 — Google Maps (Desktop)</p>
                         <ol className="text-xs text-muted-foreground space-y-1 list-none">
                           <li className="flex items-start gap-2"><span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-secondary text-foreground font-bold text-[10px]">1</span>Open <a href="https://maps.google.com" target="_blank" rel="noreferrer" className="text-primary underline underline-offset-2">maps.google.com</a></li>
                           <li className="flex items-start gap-2"><span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-secondary text-foreground font-bold text-[10px]">2</span>Search your PG's address</li>
-                          <li className="flex items-start gap-2"><span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-secondary text-foreground font-bold text-[10px]">3</span>Right-click on the exact location on the map</li>
-                          <li className="flex items-start gap-2"><span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-secondary text-foreground font-bold text-[10px]">4</span>Click the coordinates shown at the top (e.g. 27.6058, 77.5945)</li>
-                          <li className="flex items-start gap-2"><span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-secondary text-foreground font-bold text-[10px]">5</span>First number = Latitude · Second number = Longitude</li>
+                          <li className="flex items-start gap-2"><span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-secondary text-foreground font-bold text-[10px]">3</span>Right-click on the exact location</li>
+                          <li className="flex items-start gap-2"><span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-secondary text-foreground font-bold text-[10px]">4</span>Click the coordinates shown at the top</li>
+                          <li className="flex items-start gap-2"><span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-secondary text-foreground font-bold text-[10px]">5</span>First number = Latitude · Second = Longitude</li>
                         </ol>
                       </div>
-
                       <div className="h-px bg-border" />
-
-                      {/* Method 3 */}
                       <div className="space-y-1.5">
                         <p className="text-xs font-medium text-foreground">Method 3 — Google Maps App (Mobile)</p>
                         <ol className="text-xs text-muted-foreground space-y-1 list-none">
                           <li className="flex items-start gap-2"><span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-secondary text-foreground font-bold text-[10px]">1</span>Open Google Maps on your phone</li>
-                          <li className="flex items-start gap-2"><span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-secondary text-foreground font-bold text-[10px]">2</span>Long press on your PG's location on the map</li>
-                          <li className="flex items-start gap-2"><span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-secondary text-foreground font-bold text-[10px]">3</span>Coordinates appear at the top of the screen</li>
-                          <li className="flex items-start gap-2"><span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-secondary text-foreground font-bold text-[10px]">4</span>Tap them to copy, then paste here</li>
+                          <li className="flex items-start gap-2"><span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-secondary text-foreground font-bold text-[10px]">2</span>Long press on your PG's location</li>
+                          <li className="flex items-start gap-2"><span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-secondary text-foreground font-bold text-[10px]">3</span>Coordinates appear at the top</li>
+                          <li className="flex items-start gap-2"><span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-secondary text-foreground font-bold text-[10px]">4</span>Tap to copy, then paste here</li>
                         </ol>
                       </div>
                     </div>
@@ -484,9 +654,7 @@ const AddPG = () => {
                 <div className="grid grid-cols-3 gap-2">
                   {amenities.map((a) => (
                     <label key={a.key} className="flex items-center gap-2 rounded-lg border border-border p-2 text-sm hover:bg-secondary/30 cursor-pointer transition-colors">
-                      <input type="checkbox" className="accent-primary"
-                        checked={(form as any)[a.key]}
-                        onChange={(e) => setForm({ ...form, [a.key]: e.target.checked })} />
+                      <input type="checkbox" className="accent-primary" checked={(form as any)[a.key]} onChange={(e) => setForm({ ...form, [a.key]: e.target.checked })} />
                       {a.label}
                     </label>
                   ))}
@@ -499,13 +667,10 @@ const AddPG = () => {
             </form>
           )}
           {step === "images" && createdPgId && (
-            <ImageUploadStep
-              pgId={createdPgId}
-              onComplete={() => {
-                toast.success("PG submitted for approval!");
-                navigate("/owner/listings");
-              }}
-            />
+            <ImageUploadStep pgId={createdPgId} onComplete={() => {
+              toast.success("PG submitted for approval!");
+              navigate("/owner/listings");
+            }} />
           )}
         </div>
       </div>
@@ -630,13 +795,9 @@ const OwnerReviews = () => {
             </div>
           ) : (
             <div className="mt-3">
-              <textarea
-                placeholder="Write a reply..."
-                rows={2}
-                value={replies[r.id] || ""}
+              <textarea placeholder="Write a reply..." rows={2} value={replies[r.id] || ""}
                 onChange={(e) => setReplies({ ...replies, [r.id]: e.target.value })}
-                className="w-full rounded-xl border border-border bg-secondary/50 p-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none"
-              />
+                className="w-full rounded-xl border border-border bg-secondary/50 p-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none" />
               <Button size="sm" className="mt-2" onClick={() => handleReply(r.id)}>Reply</Button>
             </div>
           )}
