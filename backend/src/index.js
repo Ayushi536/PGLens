@@ -41,6 +41,8 @@ app.use('/api/pgs', pgRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/images', imageRoutes);
+const analysisRoutes = require('./routes/analysis.routes');
+app.use('/api/analysis', analysisRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -65,6 +67,11 @@ const start = async () => {
     console.log(`🚀 PGLens backend running on http://localhost:${PORT}`);
     console.log(`📋 Health check: http://localhost:${PORT}/api/health`);
   });
+
+  setTimeout(async () => {
+    const { analysePGImages } = require('./services/aiAnalysisService');
+    await analysePGImages(13); // replace 1 with your actual PG id
+  }, 3000);
 };
 
 start();

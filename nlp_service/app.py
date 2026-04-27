@@ -203,6 +203,10 @@ def analyse_batch():
     
     return jsonify({"results": results})
 
+# Image analysis routes — Vision module
+from vision import vision_bp
+app.register_blueprint(vision_bp)
+
 if __name__ == '__main__':
     print("🧠 PGLens NLP Service starting on http://localhost:5001")
     app.run(host='0.0.0.0', port=5001, debug=True)

@@ -1,3 +1,4 @@
+const { analysePGImages } = require('../services/aiAnalysisService');
 const cloudinary = require('../config/cloudinary');
 const { pool } = require('../config/db');
 
@@ -94,6 +95,19 @@ const uploadCategoryImages = async (req, res) => {
       );
 
       uploadedImages.push(dbResult.rows[0]);
+    }
+    // Trigger AI analysis in background after every upload
+    const categoryCountResult = await pool.query(
+      `SELECT COUNT(DISTINCT category) as cat_count FROM pg_images
+      WHERE pg_id = $1 AND category IN ('bedroom', 'washroom')`,
+      [pg_id]
+    );
+    const hasRequiredCategories = parseInt(categoryCountResult.rows[0].cat_count) >= 2;
+
+    if (hasRequiredCategories) {
+      analysePGImages(parseInt(pg_id)).catch(err =>
+        console.error(`[AI] Auto-analysis failed for PG ${pg_id}:`, err.message)
+      );
     }
 
     res.status(201).json({

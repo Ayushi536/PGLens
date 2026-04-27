@@ -8,7 +8,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import ScoreBadge from "@/components/ScoreBadge";
 import ScoreBar from "@/components/ScoreBar";
-import { pgAPI, reviewAPI } from "@/lib/api";
+import { pgAPI, reviewAPI, imageAPI } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -29,6 +29,8 @@ const PGDetail = () => {
   // const [loading, setLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [reportedReviews, setReportedReviews] = useState<Set<number>>(new Set());
+  const [aiAnalysis, setAiAnalysis] = useState<any>(null);
+  const [aiLoading, setAiLoading] = useState(false);
 
   useEffect(() => {
     const fetchAll = async () => {
@@ -42,10 +44,24 @@ const PGDetail = () => {
         setClaims(pgData.claims || []);
         setReviews(pgData.reviews || []);
         if (scorecardData) setScorecard(scorecardData.scorecard);
+        // Fetch AI analysis
+        // Fetch AI analysis
+        // Fetch AI analysis
+        try {
+          const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+          const aiRes = await fetch(`${BASE_URL}/analysis/pg/${id}`);
+          if (aiRes.ok) {
+            const aiData = await aiRes.json();
+            setAiAnalysis(aiData);
+          }
+        } catch (e) {
+          console.error('AI fetch failed:', e);
+        }
       } catch (err) {
         console.error(err);
       } finally {
         setLoading(false);
+        setAiLoading(false);
       }
     };
     fetchAll();
@@ -202,6 +218,131 @@ const PGDetail = () => {
                 </div>
               </motion.div>
             )}
+
+            {/* AI Image Verification */}
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}
+              className="rounded-lg border border-border bg-card p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-foreground">AI Image Verification</h2>
+                <span className="text-xs text-muted-foreground rounded-full border border-border px-2 py-0.5">
+                  Powered by CLIP
+                </span>
+              </div>
+
+              {aiLoading ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                  </svg>
+                  Loading verification...
+                </div>
+              ) : !aiAnalysis || aiAnalysis.status === 'pending' || aiAnalysis.status === 'processing' ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <svg className="animate-spin h-4 w-4 text-primary" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                  </svg>
+                  AI verification in progress — check back shortly
+                </div>
+              ) : aiAnalysis.status === 'failed' ? (
+                <p className="text-sm text-muted-foreground">Image analysis unavailable for this PG.</p>
+              ) : (
+                <div className="space-y-4">
+                  {/* Trust score header */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Overall Trust Score</span>
+                    <span className={`text-2xl font-bold ${
+                      (aiAnalysis.trust_score || 0) >= 75 ? 'text-success' :
+                      (aiAnalysis.trust_score || 0) >= 50 ? 'text-warning' : 'text-destructive'
+                    }`}>
+                      {aiAnalysis.trust_score || 0}
+                      <span className="text-sm font-normal text-muted-foreground">/100</span>
+                    </span>
+                  </div>
+
+                  {/* Score bars */}
+                  <div className="space-y-3">
+                    <div>
+                      <div className="flex justify-between text-xs mb-1">
+                        <span className="text-muted-foreground">Visual Hygiene Score</span>
+                        <span className="font-medium text-foreground">{aiAnalysis.hygiene_score || 0}%</span>
+                      </div>
+                      <div className="h-2 rounded-full bg-muted overflow-hidden">
+                        <div style={{ width: `${aiAnalysis.hygiene_score || 0}%` }}
+                          className="h-full rounded-full bg-success transition-all duration-700" />
+                      </div>
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-xs mb-1">
+                        <span className="text-muted-foreground">Amenity Match</span>
+                        <span className="font-medium text-foreground">{aiAnalysis.amenity_score || 0}%</span>
+                      </div>
+                      <div className="h-2 rounded-full bg-muted overflow-hidden">
+                        <div style={{ width: `${aiAnalysis.amenity_score || 0}%` }}
+                          className="h-full rounded-full bg-primary transition-all duration-700" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Cleanliness note */}
+                  {aiAnalysis.cleanliness_note && (
+                    <p className="text-xs text-muted-foreground italic border-l-2 border-primary/40 pl-3">
+                      "{aiAnalysis.cleanliness_note}"
+                    </p>
+                  )}
+
+                  {/* Amenity verification grid */}
+                  {aiAnalysis.claimed_amenities && (
+                    <div>
+                      <p className="text-xs font-medium text-foreground mb-2">Amenity Verification</p>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {Object.entries(aiAnalysis.claimed_amenities as Record<string, boolean>)
+                          .filter(([, claimed]) => claimed)
+                          .map(([key]) => {
+                            const LABELS: Record<string, string> = {
+                              has_ac: 'AC', has_tv: 'TV', has_wifi: 'WiFi',
+                              has_laundry: 'Laundry', has_parking: 'Parking',
+                              has_security: 'Security', has_gym: 'Gym',
+                              has_hot_water: 'Hot Water', has_meals: 'Meals',
+                            };
+                            const detected = aiAnalysis.amenity_matches?.[key];
+                            const isDetectable = detected !== undefined;
+                            return (
+                              <div key={key}
+                                className={`flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs ${
+                                  !isDetectable ? 'bg-secondary/50 text-muted-foreground' :
+                                  detected ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'
+                                }`}>
+                                <span>{!isDetectable ? '–' : detected ? '✓' : '✗'}</span>
+                                <span>{LABELS[key] || key}</span>
+                              </div>
+                            );
+                          })}
+                      </div>
+                      <p className="text-[10px] text-muted-foreground mt-1.5">
+                        ✓ Confirmed · ✗ Not detected · – Not checkable from images
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Flags */}
+                  {aiAnalysis.flags?.length > 0 && (
+                    <div className="rounded-lg bg-destructive/5 border border-destructive/20 p-3 space-y-1">
+                      <p className="text-xs font-medium text-destructive">⚠ Concerns flagged</p>
+                      {aiAnalysis.flags.map((flag: string, i: number) => (
+                        <p key={i} className="text-xs text-muted-foreground">• {flag}</p>
+                      ))}
+                    </div>
+                  )}
+
+                  <p className="text-[10px] text-muted-foreground">
+                    Analysis based on uploaded images only. Actual conditions may vary.
+                    Resident reviews provide real-time verification.
+                  </p>
+                </div>
+              )}
+            </motion.div>
 
             {/* Claim vs Reality */}
             {claims.length > 0 && (
